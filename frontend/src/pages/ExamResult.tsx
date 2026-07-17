@@ -38,8 +38,6 @@ export default function ExamResult() {
   }
 
   // Build lookup map for all options across all questions
-  const allOptions = new Map<number, QuestionOption[]>();
-  // We need options from the original question data - we'll reconstruct from correct_keys
   // The actual options are stored in the backend but not returned as full list in result
   // We infer option labels A,B,C,D from correct_keys + selected_keys
 

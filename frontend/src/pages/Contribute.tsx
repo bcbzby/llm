@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react';
 import { contributeApi } from '../api';
-import type { Subject } from '../types';
-
 interface CertGroup {
   cert_id: number;
   cert_name: string;
-  subjects: Subject[];
+  subjects: { id: number; name: string }[];
 }
 
 interface OptionField {

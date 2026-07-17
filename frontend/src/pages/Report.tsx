@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { reportApi } from '../api';
 import type { ReportResponse } from '../types';
 import RadarChart from '../components/RadarChart';

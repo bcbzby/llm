@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { ExamQuestion, AnswerItem } from '../types';
+import type { ExamQuestion } from '../types';
 import { examApi } from '../api';
 
 export function useExam() {

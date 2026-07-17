@@ -54,7 +54,7 @@ export default function RadarChart({ data, width = 280, height = 280 }: RadarCha
       })}
 
       {/* 轴线 */}
-      {data.map((d, i) => {
+      {data.map((_, i) => {
         const p = getPoint(i, data.length, levels, levels);
         return (
           <line
