@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { examApi } from '../api';
-import type { ExamResultResponse, QuestionOption } from '../types';
+import type { ExamResultResponse } from '../types';
 import QuestionCard from '../components/QuestionCard';
 
 export default function ExamResult() {
