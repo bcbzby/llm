@@ -1,0 +1,76 @@
+version: "3.8"
+
+services:
+  nginx:
+    image: nginx:alpine
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - backend
+      - frontend
+    restart: always
+
+  backend:
+    build: ./backend
+    environment:
+      - APP_ENV=production
+      - DATABASE_URL=postgresql+asyncpg://postgres:${DB_PASSWORD}@postgres:5432/cloudcert
+      - REDIS_URL=redis://redis:6379/0
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+      - redis
+    restart: always
+
+  frontend:
+    build: ./frontend
+    restart: always
+
+  celery_worker:
+    build: ./backend
+    command: celery -A app.tasks.celery_app worker -l info
+    environment:
+      - APP_ENV=production
+      - DATABASE_URL=postgresql+asyncpg://postgres:${DB_PASSWORD}@postgres:5432/cloudcert
+      - CELERY_BROKER_URL=redis://redis:6379/1
+    env_file:
+      - .env
+    depends_on:
+      - backend
+      - redis
+    restart: always
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: cloudcert
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+
+  elasticsearch:
+    image: elasticsearch:8.11
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    restart: always
+
+volumes:
+  pgdata:
+  esdata:
