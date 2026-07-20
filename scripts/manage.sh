@@ -1,18 +1,15 @@
 #!/bin/bash
-# CloudCert Pro - 一键管理脚本
+# CloudCert Pro - 一键管理脚本（增量更新）
+# 每次执行只补充新增的内容，不删除已有数据。
 # 用法: bash manage.sh [命令]
 #
 # 命令:
-#   seed       - 初始化/重新分配题库和知识库
-#   crawl      - 爬取 AWS 官方 FAQ
+#   seed       - 增量更新题库+知识库（只新增不删除）
+#   crawl      - 爬取 AWS 官方 FAQ 补充题目
 #   generate   - 从模板生成更多题目
-#   all        - 完整更新（爬虫+生成+分配）
+#   all        - 全量增量更新（爬虫+生成+题库+知识库）
 #   stats      - 查看题库统计
-#   reset      - 清空所有数据并重新导入
-#
-# 示例:
-#   bash manage.sh all     # 一键更新所有
-#   bash manage.sh stats   # 查看统计
+#   reset      - 清空所有数据并重新导入（慎用）
 
 set -e
 
@@ -20,14 +17,16 @@ PROJECT=/opt/cloudcert-pro
 COMPOSE="docker compose -f ${PROJECT}/docker-compose.prod.yml"
 
 echo "========================================"
-echo "  CloudCert Pro - 管理脚本"
+echo "  CloudCert Pro - 增量管理脚本"
 echo "========================================"
 
 case "${1:-stats}" in
   seed)
-    echo "[任务] 初始化/重新分配题库和知识库..."
-    $COMPOSE exec backend sh -c "cd /app && PYTHONPATH=/app python /app/scripts/seed_data.py"
-    $COMPOSE exec backend sh -c "cd /app && PYTHONPATH=/app python /app/scripts/generate_knowledge.py --all 2>/dev/null || true"
+    echo "[任务] 增量更新题库和知识库..."
+    echo "  (只新增不存在的内容，不删除已有数据)"
+    $COMPOSE exec backend sh -c "cd /app && PYTHONPATH=/app python /app/scripts/seed_data.py" 2>/dev/null || true
+    $COMPOSE exec backend sh -c "cd /app && PYTHONPATH=/app python /app/scripts/generate_knowledge.py --all" 2>/dev/null || true
+    $COMPOSE exec backend sh -c "cd /app && PYTHONPATH=/app python /app/scripts/fill_zh_questions.py" 2>/dev/null || true
     echo "[完成]"
     ;;
 
@@ -53,7 +52,8 @@ case "${1:-stats}" in
     ;;
 
   all)
-    echo "[任务] 完整更新（爬虫+生成+知识库+分配）..."
+    echo "[任务] 全量增量更新（爬虫+生成+题库+知识库）..."
+    echo "  (所有操作都是增量，已有数据不受影响)"
     bash "$0" crawl
     bash "$0" crawl-knowledge
     bash "$0" generate
@@ -104,12 +104,15 @@ db.close()
   *)
     echo "用法: bash manage.sh [命令]"
     echo ""
+    echo "说明: 所有操作都是增量更新，不删除已有数据"
+    echo ""
     echo "命令:"
-    echo "  seed       - 初始化/重新分配题库和知识库"
-    echo "  crawl      - 爬取 AWS 官方 FAQ"
-    echo "  generate   - 从模板生成更多题目"
-    echo "  all        - 完整更新（爬虫+生成+分配）"
-    echo "  stats      - 查看题库统计"
-    echo "  reset      - 清空所有数据并重新导入"
+    echo "  seed            - 增量更新题库+知识库"
+    echo "  crawl           - 爬取 AWS FAQ 补充题目"
+    echo "  crawl-knowledge - 爬取 AWS 文档补充知识库"
+    echo "  generate        - 从模板生成题目"
+    echo "  all             - 全量增量更新（以上全部）"
+    echo "  stats           - 查看题库统计"
+    echo "  reset           - 清空所有数据重新导入（慎用）"
     ;;
 esac
