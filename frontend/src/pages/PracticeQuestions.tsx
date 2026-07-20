@@ -42,7 +42,7 @@ export default function PracticeQuestions() {
     try {
       const params: any = { page_size: 100 };
       if (selectedDifficulty !== 'all') params.difficulty = selectedDifficulty;
-      if (selectedCert) params.subject_id = selectedCert;
+      if (selectedCert) params.certification_id = selectedCert;
 
       const res = await questionApi.list(params);
       let all = res.data.data?.items || [];

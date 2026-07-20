@@ -13,6 +13,7 @@ router = APIRouter(prefix="/questions", tags=["题库"])
 @router.get("", response_model=ApiResponse)
 def list_questions(
     subject_id: int = Query(None, description="科目ID"),
+    certification_id: int = Query(None, description="认证ID"),
     difficulty: str = Query(None, description="难度: easy/medium/hard"),
     tag_ids: str = Query(None, description="标签ID，逗号分隔"),
     status: str = Query("published", description="状态"),
@@ -24,7 +25,8 @@ def list_questions(
     """获取题目列表（不含答案）"""
     service = QuestionService(db)
     data = service.get_questions(
-        subject_id=subject_id, difficulty=difficulty,
+        subject_id=subject_id, certification_id=certification_id,
+        difficulty=difficulty,
         tag_ids=tag_ids, status=status,
         page=page, page_size=page_size,
     )

@@ -13,7 +13,8 @@ class QuestionService:
         self.db = db
 
     def get_questions(
-        self, subject_id: int = None, difficulty: str = None,
+        self, subject_id: int = None, certification_id: int = None,
+        difficulty: str = None,
         tag_ids: str = None, status: str = "published",
         page: int = 1, page_size: int = 20
     ):
@@ -22,6 +23,12 @@ class QuestionService:
 
         if subject_id:
             query = query.where(Question.subject_id == subject_id)
+        if certification_id:
+            # 查找该认证下的所有科目
+            subquery = select(Subject.id).where(
+                Subject.certification_id == certification_id
+            ).subquery()
+            query = query.where(Question.subject_id.in_(select(subquery.c.id)))
         if difficulty:
             query = query.where(Question.difficulty == difficulty)
         if tag_ids:
