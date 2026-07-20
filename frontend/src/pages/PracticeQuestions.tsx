@@ -2,6 +2,12 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { questionApi, certApi } from '../api';
 import type { Question, Certification } from '../types';
 import QuestionCard from '../components/QuestionCard';
+import { useLangStore } from '../store/langStore';
+
+// 检测字符串是否包含中文字符
+function hasChinese(text: string): boolean {
+  return /[\u4e00-\u9fa5]/.test(text);
+}
 
 export default function PracticeQuestions() {
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -40,6 +46,13 @@ export default function PracticeQuestions() {
 
       const res = await questionApi.list(params);
       let all = res.data.data?.items || [];
+
+      // 根据当前语言过滤题目
+      const { lang } = useLangStore.getState();
+      all = all.filter((q: Question) => {
+        const hasCn = hasChinese(q.content);
+        return lang === 'zh' ? hasCn : !hasCn;
+      });
 
       // Filter out already-used questions when possible
       const unused = all.filter((q: Question) => !usedIdsRef.current.has(q.id));
