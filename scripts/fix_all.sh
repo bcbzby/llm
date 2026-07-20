@@ -1,112 +1,172 @@
 #!/bin/bash
-# CloudCert Pro - 语言切换 + 问题过滤 + 一键部署修复脚本
+# CloudCert Pro - 服务器一键修复脚本
 # 在服务器上直接执行: bash fix_all.sh
+# 功能:
+#   - 刷题页面中英文切换
+#   - 模拟考试页面中英文切换
+#   - 管理员密码重置
+#   - 依赖修复 + 重建部署
 
 set -e
 cd /opt/cloudcert-pro
 
 echo "============================================"
-echo "  CloudCert Pro - 全量修复部署脚本"
+echo "  CloudCert Pro 一键修复部署"
 echo "============================================"
 
-# 1. 修复前端 PracticeQuestions 语言过滤
-echo "[1/6] 添加强题页面语言过滤..."
-cat > /tmp/patch_practice.py << 'PYEOF'
-import re
+echo ""
 
-with open('/opt/cloudcert-pro/frontend/src/pages/PracticeQuestions.tsx', 'r', encoding='utf-8') as f:
-    code = f.read()
+# ============================================================
+# 1. 修复 PracticeQuestions.tsx
+# ============================================================
+echo "[1/4] 修复刷题页面语言过滤..."
+python3 << 'PYFIX1'
+with open('frontend/src/pages/PracticeQuestions.tsx', 'r', encoding='utf-8') as f:
+    c = f.read()
 
-# 添加导入 useLangStore 和 hasChinese 函数
-if 'useLangStore' not in code:
-    code = code.replace(
-        "import { useState, useEffect, useCallback, useRef } from 'react';",
-        "import { useState, useEffect, useCallback, useRef } from 'react';"
-    )
-    code = code.replace(
-        "import QuestionCard from '../components/QuestionCard';",
-        "import QuestionCard from '../components/QuestionCard';\nimport { useLangStore } from '../store/langStore';\n\nfunction hasChinese(text: string): boolean {\n  return /[\\u4e00-\\u9fa5]/.test(text);\n}"
-    )
+# 添加 useLangStore 导入 + hasChinese 函数
+old_import = "import QuestionCard from '../components/QuestionCard';"
+new_import = old_import + "\nimport { useLangStore } from '../store/langStore';\n\nfunction hasChinese(t: string): boolean {\n  return /[\\u4e00-\\u9fa5]/.test(t);\n}"
+if 'useLangStore' not in c:
+    c = c.replace(old_import, new_import)
 
-# 添加语言过滤（在 let all ... 之后）
-old = "const res = await questionApi.list(params);\n      let all = res.data.data?.items || [];\n\n      // Filter out already-used questions when possible"
-new = """const res = await questionApi.list(params);
+# 添加语言过滤
+old_filter = "const res = await questionApi.list(params);\n      let all = res.data.data?.items || [];\n\n      // Filter out already-used questions when possible"
+new_filter = """const res = await questionApi.list(params);
       let all = res.data.data?.items || [];
 
-      // 根据当前语言过滤题目
       const { lang } = useLangStore.getState();
       all = all.filter((q: any) => {
-        const hasCn = hasChinese(q.content);
-        return lang === 'zh' ? hasCn : !hasCn;
+        return lang === 'zh' ? hasChinese(q.content) : !hasChinese(q.content);
       });
 
       // Filter out already-used questions when possible"""
-code = code.replace(old, new)
+if old_filter in c:
+    c = c.replace(old_filter, new_filter)
+    print("  PracticeQuestions: OK")
+else:
+    print("  PracticeQuestions: 已修复, 跳过")
 
-with open('/opt/cloudcert-pro/frontend/src/pages/PracticeQuestions.tsx', 'w', encoding='utf-8') as f:
-    f.write(code)
-print("  PracticeQuestions.tsx 已更新")
-PYEOF
-python3 /tmp/patch_practice.py
+with open('frontend/src/pages/PracticeQuestions.tsx', 'w', encoding='utf-8') as f:
+    f.write(c)
+PYFIX1
 
-# 2. 确保 requirements.txt 有 requests
-echo "[2/6] 检查 Python 依赖..."
+# ============================================================
+# 2. 修复 ExamTaking.tsx
+# ============================================================
+echo "[2/4] 修复模拟考试页面语言过滤..."
+python3 << 'PYFIX2'
+with open('frontend/src/pages/ExamTaking.tsx', 'r', encoding='utf-8') as f:
+    c = f.read()
+
+needs_update = False
+
+# 添加导入
+old_imp = "import QuestionCard from '../components/QuestionCard';"
+new_imp = old_imp + "\nimport { useLangStore } from '../store/langStore';\n\nfunction hasChinese(t: string): boolean {\n  return /[\\u4e00-\\u9fa5]/.test(t);\n}"
+if 'useLangStore' not in c:
+    c = c.replace(old_imp, new_imp)
+    needs_update = True
+
+# 添加语言过滤逻辑 (在 currentQuestion 定义之前)
+old_def = "  const currentQuestion = examData?.questions?.[currentIndex] || null;"
+new_def = """  const { lang } = useLangStore();
+
+  // 根据语言过滤题目
+  const displayQuestions = (examData?.questions || []).filter(q => {
+    return lang === 'zh' ? hasChinese(q.content) : !hasChinese(q.content);
+  });
+  const currentQuestion = displayQuestions.length > 0
+    ? (displayQuestions[currentIndex] || null)
+    : (examData?.questions?.[currentIndex] || null);"""
+if old_def in c:
+    c = c.replace(old_def, new_def)
+    needs_update = True
+
+# 替换 examData.questions 引用 -> displayQuestions
+replacements = [
+    ("!examData || !examData.questions || examData.questions.length === 0", "!examData || !displayQuestions || displayQuestions.length === 0"),
+    ("examData.questions.filter((q) => !answers.has(q.id))", "displayQuestions.filter((q) => !answers.has(q.id))"),
+    ("examData.questions.map((q) => ({", "displayQuestions.map((q) => ({"),
+    ("Math.min(examData.questions.length - 1, i + 1)", "Math.min(displayQuestions.length - 1, i + 1)"),
+    ("currentIndex === examData.questions.length - 1", "currentIndex === displayQuestions.length - 1"),
+    ("examData.questions.map((q, idx)", "displayQuestions.map((q, idx)"),
+]
+
+for old_txt, new_txt in replacements:
+    if old_txt in c:
+        c = c.replace(old_txt, new_txt)
+        needs_update = True
+
+if needs_update:
+    print("  ExamTaking: OK")
+else:
+    print("  ExamTaking: 已修复, 跳过")
+
+with open('frontend/src/pages/ExamTaking.tsx', 'w', encoding='utf-8') as f:
+    f.write(c)
+PYFIX2
+
+# ============================================================
+# 3. 修复依赖 + 管理员密码
+# ============================================================
+echo "[3/4] 修复依赖和密码..."
 grep -qxF "requests==2.32.3" backend/requirements.txt || echo "requests==2.32.3" >> backend/requirements.txt
+echo "  requirements: OK"
 
-# 3. 重建和部署
-echo "[3/6] 重建前端和后端..."
-docker compose -f docker-compose.prod.yml build --no-cache frontend
-docker compose -f docker-compose.prod.yml build backend
-docker compose -f docker-compose.prod.yml up -d postgres redis backend frontend nginx
-
-echo "[4/6] 复制脚本到容器..."
-sleep 5
-docker cp scripts cloudcert-pro-backend-1:/app/ 2>/dev/null || true
-
-# 5. 重置管理员密码
-echo "[5/6] 重置管理员密码..."
+# 重置管理员密码
 docker compose -f docker-compose.prod.yml exec backend sh -c "
-cd /app && PYTHONPATH=/app python -c \"
+cd /app && PYTHONPATH=/app python -c '
 from app.database import SessionLocal
 from app.models.user import User
 from app.services.auth_service import AuthService
 db = SessionLocal()
-user = db.query(User).filter(User.email == 'admin@cloudcert.com').first()
-if user:
-    user.password_hash = AuthService.hash_password('admin123')
+u = db.query(User).filter(User.email == \"admin@cloudcert.com\").first()
+if u:
+    u.password_hash = AuthService.hash_password(\"admin123\")
     db.commit()
-    print('  Password reset OK')
+    print(\"  密码: OK\")
 else:
-    print('  User not found, creating...')
-    user = User(email='admin@cloudcert.com',
-                password_hash=AuthService.hash_password('admin123'),
-                nickname='Admin', role='admin', is_active=True)
-    db.add(user)
+    print(\"  账号不存在, 创建中...\")
+    u = User(email=\"admin@cloudcert.com\",
+        password_hash=AuthService.hash_password(\"admin123\"),
+        nickname=\"Admin\", role=\"admin\", is_active=True)
+    db.add(u)
     db.commit()
-    print('  Admin user created')
+    print(\"  账号: 已创建\")
 db.close()
-\"
-" 2>/dev/null || echo "  User already exists"
+'
+" 2>/dev/null || echo "  密码重置跳过"
 
-# 6. 查看状态
-echo "[6/6] 验证服务状态..."
+# ============================================================
+# 4. 重建部署
+# ============================================================
+echo "[4/4] 重建部署..."
+echo "  构建前端(无缓存)..."
+docker compose -f docker-compose.prod.yml build --no-cache frontend 2>&1 | tail -3
+echo "  重启服务..."
+docker compose -f docker-compose.prod.yml up -d frontend nginx 2>/dev/null || true
+
 sleep 3
+echo ""
 
-# 测试登录
+# ============================================================
+# 验证
+# ============================================================
+echo "============================================"
+echo "  验证服务..."
 TOKEN=$(curl -s http://10.60.79.158:5173/api/v1/auth/login -X POST \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@cloudcert.com","password":"admin123"}' 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('data',{}).get('access_token','FAIL'))" 2>/dev/null)
+  -d '{"email":"admin@cloudcert.com","password":"admin123"}' 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('data',{}).get('access_token','') or 'FAIL')")
 
 if [ "$TOKEN" = "FAIL" ] || [ -z "$TOKEN" ]; then
-    echo "  ⚠️ 登录测试失败，检查后端日志: docker logs cloudcert-pro-backend-1 --tail 10"
+    echo "  ⚠️ 登录失败, 检查: docker logs cloudcert-pro-backend-1 --tail 5"
 else
-    echo "  ✅ 登录成功！"
-    echo ""
-    echo "============================================"
-    echo "  修复完成！"
-    echo "============================================"
-    echo ""
-    echo "  访问 http://10.60.79.158:5173"
-    echo "  右上角点击 EN / 中 切换语言"
-    echo "  管理员: admin@cloudcert.com / admin123"
+    echo "  ✅ 登录成功!"
 fi
+echo "============================================"
+echo ""
+echo "  访问: http://10.60.79.158:5173"
+echo "  账号: admin@cloudcert.com / admin123"
+echo "  右上角 EN / 中 切换语言"
+echo "============================================"
