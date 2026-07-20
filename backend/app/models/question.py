@@ -31,6 +31,7 @@ class Question(Base):
 
     options: Mapped[list["QuestionOption"]] = relationship(back_populates="question", lazy="selectin")
     tags: Mapped[list["QuestionTag"]] = relationship(back_populates="question", lazy="selectin")
+    subject: Mapped["Subject"] = relationship(lazy="selectin")
 
 
 class QuestionOption(Base):
@@ -61,3 +62,4 @@ class QuestionTag(Base):
     __table_args__ = (UniqueConstraint("question_id", "tag_id"),)
 
     question: Mapped["Question"] = relationship(back_populates="tags", lazy="selectin")
+    tag: Mapped["Tag"] = relationship(lazy="selectin")

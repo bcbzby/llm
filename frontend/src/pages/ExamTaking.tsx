@@ -3,11 +3,6 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { examApi } from '../api';
 import type { ExamCreateResponse } from '../types';
 import QuestionCard from '../components/QuestionCard';
-import { useLangStore } from '../store/langStore';
-
-function hasChinese(t: string): boolean {
-  return /[\u4e00-\u9fa5]/.test(t);
-}
 
 export default function ExamTaking() {
   const { examId } = useParams<{ examId: string }>();
@@ -111,16 +106,7 @@ export default function ExamTaking() {
     return () => clearInterval(interval);
   }, [examData, submitting]);
 
-  const { lang } = useLangStore();
-
-  // 根据语言过滤题目
-  const displayQuestions = (examData?.questions || []).filter(q => {
-    const hasCn = hasChinese(q.content);
-    return lang === 'zh' ? hasCn : !hasCn;
-  });
-  const currentQuestion = displayQuestions.length > 0
-    ? (displayQuestions[currentIndex] || null)
-    : (examData?.questions?.[currentIndex] || null);
+  const currentQuestion = examData?.questions?.[currentIndex] || null;
 
   const handleSelect = useCallback((keys: string[]) => {
     if (!currentQuestion) return;
@@ -145,7 +131,7 @@ export default function ExamTaking() {
     setSubmitting(true);
     try {
       const usedSeconds = elapsedRef.current || Math.floor((Date.now() - startTimeRef.current) / 1000);
-      const answerList = displayQuestions.map((q) => ({
+      const answerList = examData.questions.map((q) => ({
         question_id: q.id,
         selected_keys: answers.get(q.id) || [],
       }));
@@ -192,7 +178,7 @@ export default function ExamTaking() {
     );
   }
 
-  const unansweredCount = displayQuestions.filter((q) => !answers.has(q.id)).length;
+  const unansweredCount = examData.questions.filter((q) => !answers.has(q.id)).length;
 
   return (
     <div className="space-y-4">
@@ -200,7 +186,7 @@ export default function ExamTaking() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex items-center justify-between sticky top-0 z-10">
         <div>
           <h1 className="font-semibold text-gray-900">{examData.certification?.name || '模拟考试'}</h1>
-          <p className="text-sm text-gray-500">第 {currentIndex + 1}/{examData.total_questions || displayQuestions.length} 题</p>
+          <p className="text-sm text-gray-500">第 {currentIndex + 1}/{examData.questions.length} 题</p>
         </div>
         <div className="flex items-center space-x-4">
           <TimerDisplay
@@ -245,8 +231,8 @@ export default function ExamTaking() {
           已答 {answers.size}/{examData.total_questions} 题 · 未答 {unansweredCount} 题
         </span>
         <button
-          onClick={() => setCurrentIndex((i) => Math.min(displayQuestions.length - 1, i + 1))}
-          disabled={currentIndex === displayQuestions.length - 1}
+          onClick={() => setCurrentIndex((i) => Math.min(examData.questions.length - 1, i + 1))}
+          disabled={currentIndex === examData.questions.length - 1}
           className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed font-medium"
         >
           下一题 →
@@ -263,7 +249,7 @@ export default function ExamTaking() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto">
-          {displayQuestions.map((q, idx) => {
+          {examData.questions.map((q, idx) => {
             const isAnswered = answers.has(q.id);
             const isMarked = markedQuestions.has(q.id);
             const isCurrent = idx === currentIndex;

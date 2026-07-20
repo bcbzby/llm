@@ -52,14 +52,19 @@ class ScoringService:
             # 按标签统计
             if hasattr(question, 'tags') and question.tags:
                 for qt in question.tags:
-                    if hasattr(qt, 'tag_id'):
+                    if hasattr(qt, 'tag') and qt.tag:
                         tid = qt.tag_id
-                        tname = getattr(qt, 'tag_name', str(tid))
-                        if tid not in tag_stats:
-                            tag_stats[tid] = TagStat(tag_id=tid, tag_name=tname)
-                        tag_stats[tid].total += 1
-                        if answer.is_correct:
-                            tag_stats[tid].correct += 1
+                        tname = qt.tag.name
+                    elif hasattr(qt, 'tag_id'):
+                        tid = qt.tag_id
+                        tname = str(tid)
+                    else:
+                        continue
+                    if tid not in tag_stats:
+                        tag_stats[tid] = TagStat(tag_id=tid, tag_name=tname)
+                    tag_stats[tid].total += 1
+                    if answer.is_correct:
+                        tag_stats[tid].correct += 1
 
             # 按科目统计
             if hasattr(question, 'subject') and question.subject:

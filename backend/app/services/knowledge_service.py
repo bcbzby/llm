@@ -1,3 +1,4 @@
+import re
 from sqlalchemy import select, func, or_
 from sqlalchemy.orm import Session
 
@@ -112,7 +113,8 @@ class KnowledgeService:
                 start = max(0, idx - 20)
                 end = min(len(article.summary), idx + len(q) + 20)
                 hl = article.summary[start:end]
-                highlight = hl.replace(q, f"<em>{q}</em>") if q in hl else hl
+                # 使用正则做大小写不敏感的替换
+                highlight = re.sub(re.escape(q), lambda m: f"<em>{m.group(0)}</em>", hl, flags=re.IGNORECASE)
 
             items.append({
                 "id": article.id,

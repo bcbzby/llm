@@ -302,13 +302,29 @@ def generate_questions(db, new_per_subject: int = 30):
             is_true = random.random() > 0.2
             display_content = content
             if not is_true:
-                # 对肯定句取反
-                if content.startswith("Amazon") or content.startswith("AWS"):
-                    display_content = content.replace(" provides", " does not provide")
-                    if display_content == content:
-                        display_content = content.replace(" supports", " does not support")
-                else:
-                    display_content = content  # 保持原样
+                # 通用取反逻辑：对肯定句取反
+                import re
+                # 尝试匹配 "is/are/提供/支持/uses/runs/operates/can/automatically"
+                negation_map = [
+                    (r"\bprovides?\s", "does not provide "),
+                    (r"\bsupports?\s", "does not support "),
+                    (r"\bis\s+(.+\.)", "is not \\1"),
+                    (r"\bare\s+(.+\.)", "are not \\1"),
+                    (r"\buses\s", "does not use "),
+                    (r"\bruns\s", "does not run "),
+                    (r"\boperates\s", "does not operate "),
+                    (r"\b(?:can|will)\s", "cannot "),
+                ]
+                negated = False
+                for pattern, replacement in negation_map:
+                    new_content, count = re.subn(pattern, replacement, content, count=1)
+                    if count > 0 and new_content != content:
+                        display_content = new_content
+                        negated = True
+                        break
+                if not negated:
+                    # 最后手段：在句首加 "Not true: "
+                    display_content = f"Not true: {content[0].lower()}{content[1:]}"
 
             explanation = f"Statement: {content}\nAnswer: {'TRUE' if is_true else 'FALSE'}. " \
                           f"This is based on AWS public documentation."
