@@ -40,6 +40,12 @@ case "${1:-stats}" in
     echo "[完成]"
     ;;
 
+  crawl-knowledge)
+    echo "[任务] 爬取 AWS 官方文档(知识库)..."
+    $COMPOSE exec backend sh -c "cd /app && PYTHONPATH=/app python /app/scripts/crawl_knowledge.py --all" 2>/dev/null || true
+    echo "[完成]"
+    ;;
+
   generate)
     echo "[任务] 从模板生成题目..."
     $COMPOSE exec backend sh -c "cd /app && PYTHONPATH=/app python /app/scripts/generate_questions.py --generate 30" 2>/dev/null || true
@@ -47,8 +53,9 @@ case "${1:-stats}" in
     ;;
 
   all)
-    echo "[任务] 完整更新（爬虫+生成+分配）..."
+    echo "[任务] 完整更新（爬虫+生成+知识库+分配）..."
     bash "$0" crawl
+    bash "$0" crawl-knowledge
     bash "$0" generate
     bash "$0" seed
     echo ""
