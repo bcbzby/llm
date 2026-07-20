@@ -36,6 +36,15 @@ try:
 except:
     QUESTION_BANK_V2 = []
 
+# 中文题库
+_spec_zh = _util.spec_from_file_location("qb_zh", os.path.join(os.path.dirname(__file__), "question_bank_zh.py"))
+try:
+    _qb_zh_mod = _util.module_from_spec(_spec_zh)
+    _spec_zh.loader.exec_module(_qb_zh_mod)
+    QUESTION_BANK_ZH = _qb_zh_mod.QUESTION_BANK_ZH
+except:
+    QUESTION_BANK_ZH = []
+
 settings = get_settings()
 sync_url = settings.database_url.replace("+aiosqlite", "").replace("+asyncpg", "")
 engine = create_engine(sync_url, connect_args={"check_same_thread": False} if "sqlite" in sync_url else {})
@@ -340,6 +349,12 @@ def get_question_pool_for_cert(allowed_tags):
             seen.add(prefix)
             pool.append(q)
         return prefix not in seen
+
+    # 0. 中文题库（优先，专业名词保留英文）
+    for q in QUESTION_BANK_ZH:
+        q_tags = set(q.get("tags", []))
+        if q_tags & allowed_tags:
+            add_q(q, q_tags)
 
     # 1. question_bank V1
     for q in QUESTION_BANK_V1:
