@@ -4,11 +4,6 @@ import type { Question, Certification } from '../types';
 import QuestionCard from '../components/QuestionCard';
 import { useLangStore } from '../store/langStore';
 
-// 检测字符串是否包含中文字符
-function hasChinese(text: string): boolean {
-  return /[\u4e00-\u9fa5]/.test(text);
-}
-
 export default function PracticeQuestions() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [certs, setCerts] = useState<Certification[]>([]);
@@ -40,30 +35,30 @@ export default function PracticeQuestions() {
   const loadQuestions = useCallback(async () => {
     setLoading(true);
     try {
-      const params: any = { page_size: 100 };
+      const { lang } = useLangStore.getState();
+      const params: any = {
+        // 交由后端在整个题库中随机抽题，避免只在最新的一页里选而导致重复
+        random_sample: true,
+        page_size: questionCount,
+        lang,
+      };
       if (selectedDifficulty !== 'all') params.difficulty = selectedDifficulty;
       if (selectedCert) params.certification_id = selectedCert;
 
-      const res = await questionApi.list(params);
-      let all = res.data.data?.items || [];
+      // 排除已经出过的题目（尽量不重复），若剩余不足则由后端自动放宽
+      const excluded = [...usedIdsRef.current];
+      if (excluded.length > 0) params.exclude_ids = excluded.join(',');
 
-      // 根据当前语言过滤题目
-      const { lang } = useLangStore.getState();
-      all = all.filter((q: Question) => {
-        const hasCn = hasChinese(q.content);
-        return lang === 'zh' ? hasCn : !hasCn;
-      });
+      let res = await questionApi.list(params);
+      let picked = res.data.data?.items || [];
 
-      // Filter out already-used questions when possible
-      const unused = all.filter((q: Question) => !usedIdsRef.current.has(q.id));
-      if (unused.length >= questionCount) {
-        all = unused;
+      // 若因排除历史题导致数量不足，去掉排除条件再抽一次，保证题量
+      if (picked.length < questionCount) {
+        delete params.exclude_ids;
+        res = await questionApi.list(params);
+        picked = res.data.data?.items || [];
       }
-      // If we don't have enough fresh questions, allow repeats
 
-      // Pick random subset
-      const count = Math.min(questionCount, all.length);
-      const picked = all.sort(() => Math.random() - 0.5).slice(0, count);
       setQuestions(picked);
       return picked;
     } catch (err) {

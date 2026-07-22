@@ -26,7 +26,6 @@ case "${1:-stats}" in
     echo "  (只新增不存在的内容，不删除已有数据)"
     $COMPOSE exec backend sh -c "cd /app && PYTHONPATH=/app python /app/scripts/seed_data.py" 2>/dev/null || true
     $COMPOSE exec backend sh -c "cd /app && PYTHONPATH=/app python /app/scripts/generate_knowledge.py --all" 2>/dev/null || true
-    $COMPOSE exec backend sh -c "cd /app && PYTHONPATH=/app python /app/scripts/fill_zh_questions.py" 2>/dev/null || true
     echo "[完成]"
     ;;
 

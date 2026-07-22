@@ -17,6 +17,9 @@ def list_questions(
     difficulty: str = Query(None, description="难度: easy/medium/hard"),
     tag_ids: str = Query(None, description="标签ID，逗号分隔"),
     status: str = Query("published", description="状态"),
+    lang: str = Query(None, description="语言过滤: zh(仅中文题) / en(仅英文题)"),
+    random_sample: bool = Query(False, description="是否从整个题库随机抽题（刷题模式）"),
+    exclude_ids: str = Query(None, description="抽题时排除的题目ID，逗号分隔"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user: User = Depends(get_current_user),
@@ -29,6 +32,7 @@ def list_questions(
         difficulty=difficulty,
         tag_ids=tag_ids, status=status,
         page=page, page_size=page_size,
+        lang=lang, random_sample=random_sample, exclude_ids=exclude_ids,
     )
     return ApiResponse(data=data)
 

@@ -41,8 +41,12 @@ export const certApi = {
 export const questionApi = {
   list: (params?: {
     subject_id?: number;
+    certification_id?: number;
     difficulty?: string;
     tag_ids?: string;
+    lang?: 'zh' | 'en';
+    random_sample?: boolean;
+    exclude_ids?: string;
     page?: number;
     page_size?: number;
   }) => client.get<ApiResponse<{ items: Question[]; total: number; page: number; page_size: number }>>('/questions', { params }),
