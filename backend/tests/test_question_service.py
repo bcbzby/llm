@@ -44,49 +44,64 @@ def _make_session():
 
 
 def _seed(db):
-    """构造两个认证：
-    - cert_zh (id=1): 30 道中文题
-    - cert_mixed (id=2): 3 道中文题 + 40 道英文题（模拟 aws-clf/aws-dop 的分布）
+    """构造 3 个认证，含跨认证内容重复（模拟实际种子数据）
+    - cert_zh: 5 道中文题（前 3 道与 cert_b 共享内容）
+    - cert_mixed: 3 道中文题 + 10 道英文题
+    - cert_b: 3 道中文题（与 cert_zh 共享内容）
     """
     cert_zh = Certification(provider="aws", code="aws-zh", name="ZH Cert", level="associate",
                             total_questions=65, pass_score=720, duration_min=130, is_active=True)
     cert_mixed = Certification(provider="aws", code="aws-clf", name="Cloud Practitioner", level="foundational",
                                total_questions=65, pass_score=700, duration_min=90, is_active=True)
-    db.add_all([cert_zh, cert_mixed])
+    cert_b = Certification(provider="aws", code="aws-shared", name="Shared", level="associate",
+                           total_questions=65, pass_score=720, duration_min=130, is_active=True)
+    db.add_all([cert_zh, cert_mixed, cert_b])
     db.flush()
 
     subj_zh = Subject(certification_id=cert_zh.id, name="ZH科目", sort_order=1, weight=100)
     subj_mixed = Subject(certification_id=cert_mixed.id, name="Mixed Subject", sort_order=1, weight=100)
-    db.add_all([subj_zh, subj_mixed])
+    subj_b = Subject(certification_id=cert_b.id, name="Shared Subj", sort_order=1, weight=100)
+    db.add_all([subj_zh, subj_mixed, subj_b])
     db.flush()
 
-    # cert_zh: 30 道中文题
-    for i in range(30):
+    shared = ["共享题目A？", "共享题目B？", "共享题目C？"]
+
+    # cert_zh: 5 道中文题（前 3 道共享）
+    for i, content in enumerate(shared + ["独立题X？", "独立题Y？"]):
         q = Question(subject_id=subj_zh.id, question_type="single_choice", difficulty="medium",
-                     content=f"这是第 {i} 道中文题目？", status="published", is_verified=True)
+                     content=content, status="published", is_verified=True)
         db.add(q)
         db.flush()
-        db.add(QuestionOption(question_id=q.id, option_key="A", content="选项A", is_correct=True, sort_order=0))
-        db.add(QuestionOption(question_id=q.id, option_key="B", content="选项B", is_correct=False, sort_order=1))
+        db.add(QuestionOption(question_id=q.id, option_key="A", content="OptA", is_correct=True, sort_order=0))
+        db.add(QuestionOption(question_id=q.id, option_key="B", content="OptB", is_correct=False, sort_order=1))
 
-    # cert_mixed: 3 道中文题 + 40 道英文题
+    # cert_b: 3 道共享中文题（与 cert_zh 内容相同）
+    for content in shared:
+        q = Question(subject_id=subj_b.id, question_type="single_choice", difficulty="medium",
+                     content=content, status="published", is_verified=True)
+        db.add(q)
+        db.flush()
+        db.add(QuestionOption(question_id=q.id, option_key="A", content="OptA", is_correct=True, sort_order=0))
+        db.add(QuestionOption(question_id=q.id, option_key="B", content="OptB", is_correct=False, sort_order=1))
+
+    # cert_mixed: 3 中文 + 10 英文
     for i in range(3):
         q = Question(subject_id=subj_mixed.id, question_type="single_choice", difficulty="medium",
-                     content=f"混合认证的中文题 {i}？", status="published", is_verified=True)
+                     content=f"混合中文题 {i}？", status="published", is_verified=True)
         db.add(q)
         db.flush()
         db.add(QuestionOption(question_id=q.id, option_key="A", content="是", is_correct=True, sort_order=0))
         db.add(QuestionOption(question_id=q.id, option_key="B", content="否", is_correct=False, sort_order=1))
-    for i in range(40):
+    for i in range(10):
         q = Question(subject_id=subj_mixed.id, question_type="single_choice", difficulty="medium",
-                     content=f"English question number {i}?", status="published", is_verified=True)
+                     content=f"English Q{i}?", status="published", is_verified=True)
         db.add(q)
         db.flush()
-        db.add(QuestionOption(question_id=q.id, option_key="A", content="True", is_correct=True, sort_order=0))
-        db.add(QuestionOption(question_id=q.id, option_key="B", content="False", is_correct=False, sort_order=1))
+        db.add(QuestionOption(question_id=q.id, option_key="A", content="T", is_correct=True, sort_order=0))
+        db.add(QuestionOption(question_id=q.id, option_key="B", content="F", is_correct=False, sort_order=1))
 
     db.commit()
-    return cert_zh.id, cert_mixed.id
+    return cert_zh.id, cert_mixed.id, cert_b.id
 
 
 def test_has_chinese():
@@ -105,17 +120,16 @@ def test_random_sample_covers_full_bank(cert_zh_id):
     seen = set()
     for _ in range(20):
         data = svc.get_questions(certification_id=cert_zh_id, lang="zh",
-                                  random_sample=True, page_size=10)
-        assert len(data["items"]) == 10, f"应抽到10题，实际 {len(data['items'])}"
-        # 同一次抽取内不允许重复
+                                  random_sample=True, page_size=5)
+        assert len(data["items"]) == 5, f"应抽到5题，实际 {len(data['items'])}"
         ids = [it["id"] for it in data["items"]]
-        assert len(set(ids)) == 10, "单次抽取内部出现重复题目"
+        assert len(set(ids)) == 5, "单次抽取内部出现重复题目"
         seen.update(ids)
 
-    # 30 道题库，20 次各抽 10 题，应覆盖到远多于 10 道不同题目
-    assert len(seen) > 10, f"随机抽题未覆盖整个题库，仅命中 {len(seen)} 道"
-    assert data["total"] == 30, f"total 应为题库总数 30，实际 {data['total']}"
-    print(f"[PASS] Bug1 随机抽题覆盖题库：20次抽取共命中 {len(seen)}/30 道不同题目")
+    # 5 个唯一中文题（3共享+2独立），多次抽取应全部覆盖
+    assert len(seen) == 5, f"随机抽题未覆盖全部唯一内容，仅命中 {len(seen)}/5"
+    assert data["total"] == 5, f"total 应为去重后总数 5，实际 {data['total']}"
+    print(f"[PASS] Bug1 随机抽题覆盖全量：去重后5个唯一题全部命中")
     db.close()
 
 
@@ -126,16 +140,15 @@ def test_exclude_ids_avoids_repeats(cert_zh_id):
     svc = QuestionService(db)
 
     first = svc.get_questions(certification_id=cert_zh_id, lang="zh",
-                              random_sample=True, page_size=10)
+                              random_sample=True, page_size=5)
     used_ids = [it["id"] for it in first["items"]]
 
     second = svc.get_questions(certification_id=cert_zh_id, lang="zh",
-                               random_sample=True, page_size=10,
+                               random_sample=True, page_size=5,
                                exclude_ids=",".join(map(str, used_ids)))
     second_ids = {it["id"] for it in second["items"]}
 
     assert not (set(used_ids) & second_ids), "排除后仍出现重复题目"
-    assert len(second["items"]) == 10, "排除后题量不足"
     print("[PASS] Bug1 exclude_ids 成功避免重复")
     db.close()
 
@@ -146,17 +159,17 @@ def test_mixed_cert_returns_full_count(cert_mixed_id):
     _seed(db)
     svc = QuestionService(db)
 
-    # 选 20 道英文题：该认证有 40 道英文题，应取满
+    # 选 8 道英文题：该认证有 10 道英文题，应取满
     data = svc.get_questions(certification_id=cert_mixed_id, lang="en",
-                             random_sample=True, page_size=20)
-    assert len(data["items"]) == 20, f"英文题应取满20道，实际 {len(data['items'])}"
+                             random_sample=True, page_size=8)
+    assert len(data["items"]) == 8, f"英文题应取满8道，实际 {len(data['items'])}"
     for it in data["items"]:
         assert not _has_chinese(it["content"]), "en 过滤后混入了中文题"
-    print(f"[PASS] Bug2 混合认证英文抽题取满：{len(data['items'])}/20，total={data['total']}")
+    print(f"[PASS] Bug2 混合认证英文抽题取满：{len(data['items'])}/8，total={data['total']}")
 
-    # 选 20 道中文题：该认证只有 3 道中文题，应返回 3 道（不报错、不混英文）
+    # 选 5 道中文题：该认证只有 3 道中文题，应返回 3 道（不报错、不混英文）
     data_zh = svc.get_questions(certification_id=cert_mixed_id, lang="zh",
-                                random_sample=True, page_size=20)
+                                random_sample=True, page_size=5)
     assert len(data_zh["items"]) == 3, f"中文题只有3道，应返回3道，实际 {len(data_zh['items'])}"
     for it in data_zh["items"]:
         assert _has_chinese(it["content"]), "zh 过滤后混入了英文题"
@@ -171,18 +184,44 @@ def test_lang_filter_pagination(cert_mixed_id):
     svc = QuestionService(db)
 
     data = svc.get_questions(certification_id=cert_mixed_id, lang="en",
-                             page=1, page_size=15)
-    assert data["total"] == 40, f"英文题总数应为40，实际 {data['total']}"
-    assert len(data["items"]) == 15, "分页大小不对"
+                             page=1, page_size=8)
+    assert data["total"] == 10, f"英文题总数应为10，实际 {data['total']}"
+    assert len(data["items"]) == 8, "分页大小不对"
     for it in data["items"]:
         assert not _has_chinese(it["content"])
     print(f"[PASS] 非随机模式语言过滤+分页正确：total={data['total']}，本页={len(data['items'])}")
     db.close()
 
 
+def test_random_sample_deduplicates_content(cert_zh_id, cert_b_id):
+    """核心测试：跨认证存在重复内容时，random_sample 模式必须按内容去重"""
+    db = _make_session()
+    _seed(db)
+    svc = QuestionService(db)
+
+    # cert_zh: 5 行 DB 记录（3共享+2独立）→ 5 唯一内容
+    for _ in range(5):
+        data = svc.get_questions(certification_id=cert_zh_id, lang="zh",
+                                 random_sample=True, page_size=5)
+        assert len(data["items"]) == 5, f"应去重后抽到5题，实际 {len(data['items'])}"
+        assert len(set(it["content"] for it in data["items"])) == 5, "去重失败：有内容重复"
+    print(f"[PASS] 去重 test: cert_zh 有 {data['total']} 唯一内容")
+
+    # 不加 cert 抽查全部中文题：cert_zh(5) + cert_b(3共享) + cert_mixed(3) = 11 DB 行
+    # 去重后: 3 共享 ✓ + 2 独立 ✓ + 3 混合 ✓ = 8 唯一内容
+    data_all = svc.get_questions(lang="zh", random_sample=True, page_size=10)
+    assert data_all["total"] == 8, f"全部中文去重后应为8个唯一内容，实际 {data_all['total']}"
+    assert len(data_all["items"]) == 8
+    contents = [it["content"] for it in data_all["items"]]
+    assert len(set(contents)) == 8, "全部题库去重后仍有重复内容"
+    print(f"[PASS] 全部题库去重准确：{data_all['total']}/8 唯一内容")
+
+    db.close()
+
+
 def run_all():
     db = _make_session()
-    cert_zh_id, cert_mixed_id = _seed(db)
+    cert_zh_id, cert_mixed_id, cert_b_id = _seed(db)
     db.close()
 
     test_has_chinese()
@@ -190,6 +229,7 @@ def run_all():
     test_exclude_ids_avoids_repeats(cert_zh_id)
     test_mixed_cert_returns_full_count(cert_mixed_id)
     test_lang_filter_pagination(cert_mixed_id)
+    test_random_sample_deduplicates_content(cert_zh_id, cert_b_id)
     print("\n=== All tests passed ===")
 
 

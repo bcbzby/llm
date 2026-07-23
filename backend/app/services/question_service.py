@@ -71,9 +71,16 @@ class QuestionService:
                 query = query.where(Question.id.notin_(exclude_id_set))
 
         if random_sample:
-            # 刷题模式：取出整个匹配池（仅ID+content用于语言过滤），
+            # 刷题模式：取出整个匹配池，按内容去重 + 语言过滤，
             # 随机抽取 page_size 道，保证覆盖全部题库而非仅最新的一页
             all_rows = list(self.db.execute(query).scalars().all())
+            # 按内容去重（跨认证共享的题在 DB 中有多条同内容记录）
+            seen_content = {}
+            for q in all_rows:
+                if q.content not in seen_content:
+                    seen_content[q.content] = q
+            all_rows = list(seen_content.values())
+
             if lang == "zh":
                 all_rows = [q for q in all_rows if _has_chinese(q.content)]
             elif lang == "en":
